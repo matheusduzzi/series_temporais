@@ -1,0 +1,106 @@
+---
+title: "Series_Temporais"
+output: html_notebook
+---
+
+# Coleta dos dados
+
+```{r}
+library(readr)
+grao <- read_csv("grao.csv")
+
+library(dplyr)
+soja = grao %>% filter(name == "producao" & PRODUTO == "SOJA" & ano != '2019/20 Previsão (¹)') %>% select(ano,rend)
+soja_prev = grao %>% filter(name == "producao" & PRODUTO == "SOJA" & ano == '2019/20 Previsão (¹)') %>% select(ano,rend)
+
+colnames(soja) <- c("ano","quantidade")
+colnames(soja_prev) <- c("ano","quantidade")
+
+
+soja$quantidade = as.numeric(soja$quantidade)
+soja$ano = gsub("/[0-9][0-9]","",soja$ano)
+```
+
+# Criação da séries temporal
+
+```{r}
+library(forecast)
+
+ts_soja = ts(soja$quantidade,start =(1976),end = c(2018))
+autoplot(ts_soja)
+```
+
+# Teste de estacionariedade
+
+```{r}
+x = Box.test(ts_soja,type="Ljung-Box")
+print(x)
+
+#faz a diferenciacao
+z = diff(airmiles)
+
+#quantos processos de dif. precisam
+#Phillips-Perron test
+ndiffs(ts_soja, test="pp")
+ndiffs(z, test="pp")
+```
+
+# Modelagem
+
+```{r}
+#train = window(ts_soja, start = c(1976), end = c(2010))
+#test = window(ts_soja, start = c(2011), end = c(2018))
+#sub_soja = window(ts_soja, start = c(2000), end = c(2018))
+
+model1 = auto.arima(ts_soja,stepwise = FALSE,approximation = FALSE, trace = TRUE)
+model2 = nnetar(ts_soja)
+model3 = ets(ts_soja)
+model4 = arima(ts_soja, order = c(0,1,2))
+```
+
+# Previsão
+
+```{r}
+forc1 = forecast(model1,h=2)
+forc2 = forecast(model2,h=2)
+forc3 = forecast(model3,h=2)
+forc4 = forecast(model4,h=2)
+```
+
+# Análise dos resíduos
+
+```{r}
+#forc2$residuals
+autoplot(forc4$residuals)
+
+hist(forc1$residuals)
+var(forc1$residuals,na.rm = T)
+mean(as.vector(forc1$residuals),na.rm = T)
+
+#acf e pacf
+acf(forc1$residuals, na.action = na.pass )
+
+#funcao especial para checar residuais
+checkresiduals(forc1)
+
+#teste de normalidade
+shapiro.test(forc1$residuals)
+```
+
+# Visualização 1
+
+```{r}
+split.screen(c(2,1))
+screen(1)
+plot(forc4)
+screen(2)
+plot(forc3)
+close.screen(c(2,1))
+
+prev = data.frame(forc1$mean)
+prev$forc1.mean[1] - soja_prev$quantidade
+```
+
+
+
+
